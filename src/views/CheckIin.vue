@@ -50,8 +50,6 @@
     <SchedulePage 
       v-model:visible="visible" 
       :doctor="doctor" 
-      :is-paid-service="isPaidService"
-      :selected-paid-service="selectedPaidService"
       @booked="handleAppointmentBooked" 
     />
     
@@ -98,8 +96,6 @@ const { enableSound } = useSoundControl();
 // Состояние для SchedulePage
 const visible = ref(false);
 const doctor = ref<Doctor | null>(null);
-const isPaidService = ref(false);
-const selectedPaidService = ref(null);
 
 // Состояние для ApprovePage
 const showApprovePage = ref(false);
@@ -150,8 +146,6 @@ const openTherapistSchedule = async () => {
   const therapist = await getTherapist();
   if (therapist) {
     doctor.value = therapist;
-    isPaidService.value = false;
-    selectedPaidService.value = null;
     visible.value = true;
   } else {
     // Можно показать уведомление пользователю

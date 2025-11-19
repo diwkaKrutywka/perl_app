@@ -25,7 +25,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/InfoService.vue'),
   },
   {
-    path: '/info-details',
+    path: '/info-details/:id?',
     name: 'InfoDetails',
     component: () => import('../views/InfoDetails.vue'),
   },
@@ -38,6 +38,10 @@ const routes: RouteRecordRaw[] = [
     path: '/auth-page',
     name: 'AuthPage',
     component: () => import('../views/AuthPage.vue'),
+  },
+  {path:'/search',
+    name: 'SearchPage',
+    component: () => import('../views/SearchPage.vue'),
   },
   {
     path: '/doctors',

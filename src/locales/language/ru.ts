@@ -192,6 +192,7 @@ export default {
   auth_error_short: "ИИН должен содержать 12 цифр",
   auth_error_long: "ИИН не должен содержать более 12 цифр",
   auth_error_invalid: "ИИН должен содержать только цифры",
+  auth_error_incorrect: "Некорректный ИИН",
   // InfoDetails.vue
   general_services: "Общие услуги",
   // InfoService.vue
@@ -441,6 +442,9 @@ export default {
   working_hours_monday: "Пн, ср, пт — 12:00-19:00",
   working_hours_tuesday: "Вт, чт — 8:00-15:30",
   city_clinic: "Городская поликлиника",
+  no_available_slots: "Нет доступных слотов времени",
+  appointment_failed_title: "Не удалось записаться",
+  appointment_failed_message: "Не удалось записать вас на приём. Пожалуйста, попробуйте снова.",
   
   // StaticAd.vue
   static_ad_title: "Чтобы узнать как заказать<br/>такой терминал,<br/>отсканируйте QR-код",

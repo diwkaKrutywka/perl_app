@@ -146,6 +146,14 @@ const backspace = () => {
   }
 };
 
+const multiply = (iin: string, weights: number[]): number => {
+  let result = 0;
+  for (let i = 0; i < Math.min(iin.length, weights.length); i++) {
+    result += parseInt(iin[i]) * weights[i];
+  }
+  return result;
+};
+
 const validateIin = () => {
   if (iin.value.length === 0) {
     iinError.value = $t('auth_error_empty');
@@ -160,6 +168,21 @@ const validateIin = () => {
     iinError.value = $t('auth_error_invalid');
     return false;
   }
+  
+  // Проверка контрольной суммы ИИН
+  const w1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  const w2 = [3, 4, 5, 6, 7, 8, 9, 10, 11, 1, 2];
+  
+  let checkSum = multiply(iin.value, w1) % 11;
+  if (checkSum === 10) {
+    checkSum = multiply(iin.value, w2) % 11;
+  }
+  
+  if (checkSum !== parseInt(iin.value[11])) {
+    iinError.value = $t('auth_error_incorrect');
+    return false;
+  }
+  
   return true;
 };
 

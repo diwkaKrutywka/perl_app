@@ -189,6 +189,7 @@ export default {
   auth_error_short: "ЖСН 12 цифрдан тұруы керек",
   auth_error_long: "ЖСН 12 цифрдан аспауы керек",
   auth_error_invalid: "ЖСН тек цифрлардан тұруы керек",
+  auth_error_incorrect: "Дұрыс емес ЖСН",
   // InfoDetails.vue
   general_services: "Жалпы қызметтер",
   // InfoService.vue
@@ -438,6 +439,9 @@ export default {
   working_hours_monday: "Дс, Ср, Жм — 12:00-19:00",
   working_hours_tuesday: "Сс, Бс — 8:00-15:30",
   city_clinic: "Қалалық поликлиника",
+  no_available_slots: "Бос уақыт слоттары жоқ",
+  appointment_failed_title: "Жазылу мүмкін болмады",
+  appointment_failed_message: "Сізді қабылдауға жазылу мүмкін болмады. Қайталап көріңіз.",
   
   // StaticAd.vue
   static_ad_title: "Мұндай терминалды<br/>қалай тапсырыс беру керектігін<br/>білу үшін QR-кодты сканерлеңіз",

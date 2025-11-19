@@ -157,7 +157,7 @@ const loadSpecialties = async () => {
   error.value = null;
 
   try {
-    const response = await SpecialtiesApi("578b99c8-1234-4537-af69-640f8edf77cd/", {}, "GET");
+    const response = await SpecialtiesApi("4397b3cd-60e2-419f-a146-a060d0b58f0c/", {}, "GET");
     
     console.log('API Response data:', response.data);
 
@@ -242,7 +242,7 @@ const selectSpecialty = (specialtyId: string) => {
   if (clinicSpecialty) {
     const queryParams = {
       clinic_specialty_id: clinicSpecialty.id,
-      clinic_id: "578b99c8-1234-4537-af69-640f8edf77cd"
+      clinic_id: "4397b3cd-60e2-419f-a146-a060d0b58f0c"
     };
     console.log('Navigating to doctors with params:', queryParams);
     

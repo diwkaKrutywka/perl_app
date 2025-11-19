@@ -191,7 +191,13 @@ async function fetchDoctors() {
           schedule_string: doctor.schedules && doctor.schedules.length > 0 
             ? doctor.schedules.map((s: any) => s.schedule_string).join('; ')
             : 'По записи',
-          type: 'oms' as const
+          type: 'oms' as const,
+          // Сохраняем damu_post_id для использования в запросах
+          post_id: doctor.damu_post_id || doctor.post_id,
+          // Извлекаем price_list_service_id из services, если доступен
+          price_list_service_id: doctor.services && doctor.services.length > 0
+            ? doctor.services[0]?.clinic_service?.service?.damu_price_list_service_id
+            : undefined
         };
         console.log('Processed doctor:', processedDoctor);
         return processedDoctor;
@@ -241,7 +247,13 @@ function openScheduleModal(selectedDoctor: Doctor | SearchDoctor) {
         : 'Специальность не указана'),
       cabinet: doctorData.cabinet || 'Не указан',
       schedule_string: doctorData.schedule_string || 'По записи',
-      type: doctorData.type || 'oms'
+      type: doctorData.type || 'oms',
+      // Сохраняем damu_post_id и другие важные поля
+      post_id: doctorData.post_id || doctorData.damu_post_id,
+      price_list_service_id: 
+        (doctorData.services && doctorData.services.length > 0
+          ? doctorData.services[0]?.clinic_service?.damu_price_list_service_id || doctorData.services[0]?.clinic_service?.service?.damu_price_list_service_id
+          : undefined)
     };
   }
   

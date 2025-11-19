@@ -12,36 +12,18 @@
   >
     <div class="modal-inner" >
       <!-- Инфо о докторе -->
-      <div v-if="doctor && !isPaidService" class="text-center mb-4 p-8">
-        <div class="font-bold text-lg">{{ doctor.full_name }}</div>
+      <div v-if="doctor" class="text-center mb-4 p-8">
+        <div class="font-bold text-lg">{{ doctor.full_name || currentSchedule?.specialist_name }}</div>
         <div class="text-green-600">
-          {{ doctor.specialty }} / Каб. №{{ doctor.cabinet }}
+          {{ doctor.specialty }} / {{ currentSchedule?.cabinet || `Каб. №${doctor.cabinet}` }}
+        </div>
+        <div v-if="currentSchedule?.address_name" class="text-gray-500 text-sm text-center mt-2">
+          {{ currentSchedule.address_name }}
         </div>
         <div class="text-gray-500 text-sm text-center">
           {{ $t('working_hours_monday') }}<br/>
           {{ $t('working_hours_tuesday') }}
         </div>
-      </div>
-
-      <!-- Селект врача для платных услуг -->
-      <div v-if="doctor && isPaidService" class="mb-4 p-4 bg-gray-50 rounded-lg text-center flex flex-col items-center justify-center">
-        <div class="font-bold text-lg text-[#11AE78] mb-4">{{ doctor.full_name }}</div>
-        <div class="font-semibold mb-2 text-center text-gray-700">{{ $t('select_doctor') }}</div>
-        <a-select
-          v-model:value="selectedDoctorForPaid"
-          :placeholder="$t('select_doctor_placeholder')"
-          class="w-full max-w-md mx-auto"
-          size="large"
-          @change="onDoctorChange"
-        >
-          <a-select-option
-            v-for="doctor in availableDoctors"
-            :key="doctor.id"
-            :value="doctor.id"
-          >
-            {{ doctor.name }} - {{ doctor.specialty }}
-          </a-select-option>
-        </a-select>
       </div>
 
       <!-- Календарь -->
@@ -51,7 +33,7 @@
           <!-- Левая стрелка -->
           <button 
             class="calendar-nav-arrow left-arrow"
-            @click="() => selectedDate && (selectedDate = selectedDate.subtract(1, 'month'))"
+            @click="handleMonthChange(-1)"
           >
             ←
           </button>
@@ -71,14 +53,24 @@
             <template #dateFullCellRender="{ current }">
               <div
                 :class="[
-                  'w-8 h-8 flex items-center justify-center rounded-full cursor-pointer',
+                  'w-8 h-8 flex items-center justify-center rounded-full relative',
                   selectedDate && current.isSame(selectedDate, 'day')
-                    ? 'bg-[#11AE78] text-white font-bold'
-                    : 'hover:bg-gray-100',
+                    ? 'bg-[#11AE78] text-white font-bold cursor-pointer'
+                    : hasAvailableSlots(current)
+                    ? 'hover:bg-gray-100 date-with-slots cursor-pointer'
+                    : disabledDate(current)
+                    ? 'opacity-30 cursor-not-allowed'
+                    : 'hover:bg-gray-100 opacity-50 cursor-pointer',
                 ]"
-                @click="() => selectDate(current)"
+                @click="() => !disabledDate(current) && selectDate(current)"
               >
                 {{ current.date() }}
+                <!-- Индикатор наличия слотов -->
+                <span
+                  v-if="hasAvailableSlots(current) && (!selectedDate || !current.isSame(selectedDate, 'day'))"
+                  class="absolute bottom-0.5 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-[#11AE78] rounded-full"
+                  style="box-shadow: 0 0 2px rgba(17, 174, 120, 0.5);"
+                ></span>
               </div>
             </template>
           </a-calendar>
@@ -86,7 +78,7 @@
           <!-- Правая стрелка -->
           <button 
             class="calendar-nav-arrow right-arrow"
-            @click="() => selectedDate && (selectedDate = selectedDate.add(1, 'month'))"
+            @click="handleMonthChange(1)"
           >
             →
           </button>
@@ -94,7 +86,13 @@
       </div>
 
       <!-- Время приёма -->
-      <div v-if="timeSlots.length" class="mb-4 max-w-md mx-auto">
+      <div v-if="isLoadingSlots" class="mb-4 max-w-md mx-auto">
+        <div class="font-semibold mb-2 text-center">{{ $t('select_appointment_time') }}</div>
+        <div class="flex justify-center items-center px-[20px] py-[20px]">
+          <a-spin size="large" />
+        </div>
+      </div>
+      <div v-else-if="timeSlots.length" class="mb-4 max-w-md mx-auto">
         <div class="font-semibold mb-2 text-center">{{ $t('select_appointment_time') }}</div>
         <div class="flex flex-wrap gap-1 px-[20px] py-[20px]">
           <a-button
@@ -113,13 +111,19 @@
           </a-button>
         </div>
       </div>
+      <div v-else-if="selectedDate && !isLoadingSlots" class="mb-4 max-w-md mx-auto">
+        <div class="font-semibold mb-2 text-center">{{ $t('select_appointment_time') }}</div>
+        <div class="text-center text-gray-500 px-[20px] py-[20px]">
+          {{ $t('no_available_slots') }}
+        </div>
+      </div>
 
       <!-- Записаться -->
       <div class="text-center flex items-center justify-center ">
         <a-button
           type="primary"
           class="custom-green-btn px-8 py-6"
-          :disabled="!selectedDate || !selectedTime || (isPaidService && !selectedDoctorForPaid)"
+          :disabled="!selectedDate || !selectedTime"
           @click="bookAppointment"
         >
           <span class="text-white px-6"> {{ $t('book_appointment_button') }} </span>
@@ -166,16 +170,7 @@
         <div class="info-section">
           <div class="info-label">{{ $t('appointment_label') }}</div>
           <div class="info-value">
-            <template v-if="isPaidService">
-              {{ selectedPaidService?.full_name }} ({{ selectedPaidService?.specialty }})
-              <br>
-              <span class="text-sm text-gray-500">
-                Врач: {{ availableDoctors.find(d => d.id === selectedDoctorForPaid)?.name }}
-              </span>
-            </template>
-            <template v-else>
-              {{ doctor?.full_name }} ({{ doctor?.specialty }})
-            </template>
+            {{ doctor?.full_name }} ({{ doctor?.specialty }})
           </div>
           <div class="info-divider"></div>
         </div>
@@ -190,7 +185,7 @@
 
         <div class="info-section">
           <div class="info-label">{{ $t('cabinet_label') }}</div>
-          <div class="info-value">Каб. №{{ doctor?.cabinet }}</div>
+          <div class="info-value">{{ currentSchedule?.cabinet || `Каб. №${doctor?.cabinet}` }}</div>
           <div class="info-divider"></div>
         </div>
 
@@ -200,19 +195,6 @@
           <div class="info-divider"></div>
         </div>
 
-        <!-- Информация о стоимости для платных услуг -->
-        <div v-if="isPaidService && selectedPaidService" class="info-section">
-          <div class="info-label">{{ $t('cost_label') }}</div>
-          <div class="info-value">
-            <div class="text-green-600 font-bold">
-              {{ $t('first_visit_price') }} {{ selectedPaidService.first_price }} ₸
-            </div>
-            <div class="text-gray-600 text-sm">
-              {{ $t('follow_up_price') }} {{ selectedPaidService.next_price }} ₸
-            </div>
-          </div>
-          <div class="info-divider"></div>
-        </div>
       </div>
 
       <!-- Инструкция -->
@@ -224,10 +206,10 @@
       <div class="confirmation-button-container">
         <div
           class="rounded-full bg-[#0C593E] text-white px-4 py-2 font-bold cursor-pointer max-w-xs mx-auto text-[16px] text-center approve"
-          :class="{ 'opacity-50 cursor-not-allowed': isCreatingAppointment && !isPaidService }"
+          :class="{ 'opacity-50 cursor-not-allowed': isCreatingAppointment }"
           @click="confirmAppointment"
         >
-          <span v-if="isCreatingAppointment && !isPaidService">{{ $t('creating_appointment_text') }}</span>
+          <span v-if="isCreatingAppointment">{{ $t('creating_appointment_text') }}</span>
           <span v-else>{{ $t('confirm_button') }}</span>
         </div>
       </div>
@@ -247,9 +229,13 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch, onMounted } from "vue";
+import { ref, watch } from "vue";
 import dayjs, { Dayjs } from "dayjs";
+import { notification } from "ant-design-vue";
 import { createAppointment, type CreateAppointmentRequest } from "../api/appointments";
+import { getScheduleSlots, type GetScheduleSlotsParams, type ScheduleWithSlots, type Schedule } from "../api/appointment";
+import { useUserStore } from "../store/index";
+import { useI18n } from "vue-i18n";
 
 // Русские названия месяцев
 const monthNames = [
@@ -265,51 +251,94 @@ interface Doctor {
   specialty: string;
   cabinet: string;
   schedule_string: string;
-  type?: "oms" | "paid";
+  post_id?: number;
+  damu_post_id?: number;
+  org_healthcare_id?: string;
+  price_list_service_id?: number;
+  clinic_id?: string;
+  specialties?: Array<{
+    id: string;
+    doctor_id: string;
+    clinic_specialty_id: string;
+    is_active: boolean;
+    created_date: string;
+    updated_date: string;
+    specialty: {
+      id: string;
+      name: string;
+      name_kz?: string | null;
+      description: string;
+      description_kz?: string | null;
+      damu_hPost_id?: number;
+      is_active: boolean;
+      created_at?: string | null;
+      updated_at?: string | null;
+    };
+  }>;
+  services?: Array<{
+    id: string;
+    doctor_id: string;
+    clinic_id: string;
+    service_price?: string | null;
+    is_active: boolean;
+    created_date: string;
+    updated_date: string;
+    clinic_service: {
+      id: string;
+      clinic_id: string;
+      clinic_price: string;
+      clinic_duration_minutes?: number | null;
+      available_for_adults: boolean;
+      available_for_children: boolean;
+      covered_by_oms: boolean;
+      installment_available: boolean;
+      house_calls_available: boolean;
+      damu_price_list_service_id?: number | null;
+      damu_price_list_services_public_code?: string | null;
+      clinic_notes?: string;
+      is_available: boolean;
+      service: {
+        id: string;
+        category_id?: string | null;
+        name: string;
+        name_kz?: string;
+        description?: string;
+        damu_typical_tarificator_id?: number;
+        damu_price_list_service_id?: number;
+        damu_price_list_services_public_code?: string;
+        description_kz?: string;
+        is_active: boolean;
+        created_at?: string | null;
+        updated_at?: string | null;
+      };
+    };
+  }>;
+  [key: string]: any; // For any additional fields
 }
 
 const props = defineProps<{
   visible: boolean;
   doctor: Doctor | null;
-  isPaidService?: boolean;
-  selectedPaidService?: any;
+  org_healthcare_id?: string; // Organization ID (optional prop)
+  post_id?: number; // Doctor post ID (optional prop, can be from doctor object)
+  price_list_service_id?: number; // Service ID (optional prop)
+  region?: string; // Region code, e.g., 'ast', 'alm' (optional prop, defaults to 'ast')
 }>();
 
 const emit = defineEmits(["update:visible", "booked"]);
 
+const userStore = useUserStore();
+const { t } = useI18n();
 
 const selectedDate = ref<Dayjs | null>(dayjs()); // сегодня по умолчанию
 const selectedTime = ref<string | null>(null);
 const timeSlots = ref<any[]>([]);
-const selectedDoctorForPaid = ref<string | null>(null);
+const isLoadingSlots = ref(false);
+const currentSchedule = ref<Schedule | null>(null); // Текущее расписание с данными о кабинете и т.д.
 
-// Мок-данные врачей для платных услуг
-const availableDoctors = ref([
-  { 
-    id: "1", 
-    name: "Доктор Ахметов А.А.", 
-    specialty: "Хирург",
-    schedule_string: "пн, ср, пт 9:00-17:00; вт, чт 8:00-14:00"
-  },
-  { 
-    id: "2", 
-    name: "Доктор Смирнова Е.В.", 
-    specialty: "Окулист",
-    schedule_string: "пн-пт 9:00-18:00"
-  },
-  { 
-    id: "3", 
-    name: "Доктор Козлов И.П.", 
-    specialty: "Кардиолог",
-    schedule_string: "пн, вт, ср 10:00-16:00; чт, пт 9:00-15:00"
-  },
-  { 
-    id: "4", 
-    name: "Доктор Петрова М.С.", 
-    specialty: "Невролог",
-    schedule_string: "пн-ср 8:00-14:00; чт, пт 14:00-20:00"
-  }
-]);
+// Хранилище для всех загруженных слотов по датам
+const allLoadedSlots = ref<Map<string, { schedule: Schedule | null; slots: any[] }>>(new Map());
+const currentMonth = ref<Dayjs | null>(null); // Текущий месяц в календаре
 
 // Модалка подтверждения
 const showConfirmation = ref(false);
@@ -329,66 +358,48 @@ function handleClose() {
   emit("update:visible", false);
 }
 
-function onDoctorChange(doctorId: string) {
-  selectedDoctorForPaid.value = doctorId;
-  // Сбрасываем время при смене врача
-  selectedTime.value = null;
-  timeSlots.value = [];
-  
-  // Загружаем слоты для выбранного врача и даты
-  if (selectedDate.value) {
-    loadTimeSlots(selectedDate.value);
-  }
-}
-
-// Загружаем слоты времени при открытии модалки
-onMounted(async () => {
-  selectedDoctorForPaid.value = '1';
-});
-
-// Загружаем слоты времени при появлении доктора
-watch(
-  () => props.doctor,
-  async (doctor) => {
-    if (doctor?.id && selectedDate.value) {
-   
-      await loadTimeSlots(selectedDate.value);
-    }
-  },
-  { immediate: true }
-);
-
-// Следим за изменением visible
+// Инициализация при открытии модалки
 watch(
   () => props.visible,
   async (visible) => {
-    if (visible && props.doctor?.doctor_id && selectedDate.value) {
-      await loadTimeSlots(selectedDate.value);
+    if (visible && props.doctor?.doctor_id) {
+      // Сбрасываем состояние
+      allLoadedSlots.value.clear();
+      selectedDate.value = dayjs();
+      currentMonth.value = dayjs();
+      selectedTime.value = null;
+      
+      // Загружаем данные за весь месяц (от сегодня до конца месяца)
+      await loadMonthSlots();
+      
+      // Показываем слоты для выбранной даты (сегодня)
+      filterSlotsByDate(selectedDate.value);
     }
   }
 );
 
-// Дополнительный watcher для комбинации visible и doctor
-watch([() => props.visible, () => props.doctor], async ([visible, doctor]) => {
-  if (visible && doctor?.doctor_id && selectedDate.value) {
-    await loadTimeSlots(selectedDate.value);
+// Отслеживаем изменение месяца в календаре
+watch(
+  () => selectedDate.value,
+  (date) => {
+    if (!date) return;
+    
+    const newMonth = date.startOf('month');
+    const oldMonth = currentMonth.value?.startOf('month');
+    
+    // Если месяц изменился, загружаем данные заново
+    if (!oldMonth || !newMonth.isSame(oldMonth, 'month')) {
+      currentMonth.value = newMonth;
+      loadMonthSlots().then(() => {
+        // После загрузки фильтруем слоты для выбранной даты
+        filterSlotsByDate(date);
+      });
+    } else {
+      // Если месяц не изменился, просто фильтруем данные
+      filterSlotsByDate(date);
+    }
   }
-});
-
-// Загружаем слоты времени при выборе даты
-watch(selectedDate, async (date) => {
-  if (!date) {
-   
-    return;
-  }
-
-  if (!props.doctor?.doctor_id) {
-  
-    return;
-  }
-
-  await loadTimeSlots(date);
-});
+);
 
 // Функция для генерации слотов времени на основе расписания врача
 function generateTimeSlotsFromSchedule(doctor: Doctor | { id: string; name: string; specialty: string; schedule_string: string } | null, date: Dayjs) {
@@ -477,49 +488,232 @@ function isDayInSchedule(dayOfWeek: number, schedulePart: string): boolean {
   );
 }
 
-async function loadTimeSlots(date: Dayjs) {
-  // Для платных услуг нужен выбранный врач
-  if (props.isPaidService && !selectedDoctorForPaid.value) {
-    timeSlots.value = [];
+// Загружает данные за весь месяц (от сегодня до конца месяца)
+async function loadMonthSlots() {
+  if (!props.doctor || !selectedDate.value) {
     return;
   }
 
-  // Для ОСМС нужен doctor
-  if (!props.isPaidService && !props.doctor) {
-    timeSlots.value = [];
+  // Проверяем наличие IIN
+  if (!userStore.iin || userStore.iin.length !== 12) {
+    console.warn('IIN is not available or invalid');
     return;
   }
+
+  // Получаем необходимые параметры
+  const postId = props.post_id 
+    || props.doctor.post_id 
+    || props.doctor.damu_post_id 
+    || (props.doctor.doctor_id ? parseInt(props.doctor.doctor_id) : undefined);
+  
+  if (!postId) {
+    console.error('post_id is not available for doctor:', props.doctor);
+    return;
+  }
+  
+  let priceListServiceId = props.price_list_service_id || props.doctor.price_list_service_id;
+  if (!priceListServiceId && props.doctor.services && props.doctor.services.length > 0) {
+    const firstService = props.doctor.services[0];
+    priceListServiceId = firstService?.clinic_service?.damu_price_list_service_id || firstService?.clinic_service?.service?.damu_price_list_service_id;
+  }
+  if (!priceListServiceId) {
+    priceListServiceId = 1;
+  }
+  
+  let hPostId: number | undefined;
+  if (props.doctor.specialties && props.doctor.specialties.length > 0) {
+    hPostId = props.doctor.specialties[0]?.specialty?.damu_hPost_id;
+  }
+  
+  const orgHealthcareId = String(props.doctor.clinic_info?.damu_org_health_care_id || '57000000000003651');
+  const region = props.region || 'kos';
+
+  // Формируем диапазон: от начала месяца (или сегодня, если это текущий месяц) до конца месяца
+  const today = dayjs();
+  const monthStart = selectedDate.value.startOf('month');
+  const monthEnd = selectedDate.value.endOf('month');
+  
+  // Если это текущий месяц, начинаем с сегодня, иначе с начала месяца
+  const beginDate = monthStart.isBefore(today) ? today : monthStart;
+  const beginReceptionTime = beginDate.startOf('day').toISOString();
+  const endReceptionTime = monthEnd.endOf('day').toISOString();
 
   try {
-    let doctor = null;
+    isLoadingSlots.value = true;
+    
+    const params: GetScheduleSlotsParams = {
+      begin_reception_time: beginReceptionTime,
+      end_reception_time: endReceptionTime,
+      iin: userStore.iin,
+      org_healthcare_id: orgHealthcareId,
+      post_id: postId,
+      price_list_service_id: priceListServiceId,
+      region: region,
+      h_post_id: hPostId,
+      is_pmsp: true,
+      is_self_registration_payable: false,
+      page_index: 0,
+      page_size: 100, // Увеличиваем размер страницы для получения всех данных
+    };
 
-    // Для платных услуг используем данные из availableDoctors
-    if (props.isPaidService && selectedDoctorForPaid.value) {
-      doctor = availableDoctors.value.find(d => d.id === selectedDoctorForPaid.value);
-    } else if (!props.isPaidService) {
-      // Для ОСМС используем переданного врача
-      doctor = props.doctor;
+    const schedulesWithSlots: ScheduleWithSlots[] = await getScheduleSlots(params);
+    
+    // Очищаем предыдущие данные для текущего месяца
+    allLoadedSlots.value.clear();
+    
+    // Обрабатываем данные и группируем по датам
+    if (schedulesWithSlots && schedulesWithSlots.length > 0) {
+      // Объединяем все расписания
+      const allSchedules: ScheduleWithSlots[] = schedulesWithSlots;
+      
+      // Группируем слоты по датам
+      allSchedules.forEach((scheduleWithSlots) => {
+        if (scheduleWithSlots.schedule?.schedule_grid_cell && Array.isArray(scheduleWithSlots.schedule.schedule_grid_cell)) {
+          scheduleWithSlots.schedule.schedule_grid_cell.forEach((cell: any) => {
+            // Используем date_time_recept (новый формат) или reception_time (старый формат) для обратной совместимости
+            const receptionTime = cell.date_time_recept || cell.reception_time;
+            
+            if (receptionTime) {
+              const slotDate = dayjs(receptionTime);
+              if (!slotDate || !slotDate.isValid()) return;
+              
+              const dateKey = slotDate.format('YYYY-MM-DD');
+              
+              if (!allLoadedSlots.value.has(dateKey)) {
+                allLoadedSlots.value.set(dateKey, {
+                  schedule: scheduleWithSlots.schedule,
+                  slots: []
+                });
+              }
+              
+              const dateData = allLoadedSlots.value.get(dateKey);
+              if (dateData) {
+                // Извлекаем время из date_time_recept
+                const time = slotDate.format('HH:mm');
+                dateData.slots.push({
+                  time: time,
+                  is_available: cell.is_available !== false,
+                  date_time_recept: cell.date_time_recept,
+                  date_time_end_recept: cell.date_time_end_recept
+                });
+              }
+            }
+          });
+        } else if (scheduleWithSlots.slots && scheduleWithSlots.slots.length > 0) {
+          // Если слоты уже извлечены, группируем их по датам
+          scheduleWithSlots.slots.forEach((slot: any) => {
+            // Пытаемся найти дату в слоте (используем date_time_recept или reception_time)
+            const receptionTime = slot.date_time_recept || slot.reception_time;
+            const slotDate = receptionTime ? dayjs(receptionTime) : (selectedDate.value || dayjs());
+            if (!slotDate || !slotDate.isValid()) return;
+            
+            const dateKey = slotDate.format('YYYY-MM-DD');
+            
+            if (!allLoadedSlots.value.has(dateKey)) {
+              allLoadedSlots.value.set(dateKey, {
+                schedule: scheduleWithSlots.schedule,
+                slots: []
+              });
+            }
+            
+            const dateData = allLoadedSlots.value.get(dateKey);
+            if (dateData) {
+              dateData.slots.push(slot);
+            }
+          });
+        }
+      });
     }
-
-    if (!doctor) {
-      timeSlots.value = [];
-      return;
-    }
-
-    // Генерируем слоты времени на основе расписания врача
-    const generatedSlots = generateTimeSlotsFromSchedule(doctor, date);
-    timeSlots.value = generatedSlots;
-    selectedTime.value = null;
+    
+    console.log('Loaded slots for month:', allLoadedSlots.value);
   } catch (e) {
-    console.error('Error generating time slots:', e);
+    console.error('Error loading month slots from API:', e);
+    allLoadedSlots.value.clear();
+  } finally {
+    isLoadingSlots.value = false;
+  }
+}
+
+// Проверяет, есть ли доступные слоты для указанной даты
+function hasAvailableSlots(date: Dayjs): boolean {
+  if (!date) return false;
+  
+  const dateKey = date.format('YYYY-MM-DD');
+  const dateData = allLoadedSlots.value.get(dateKey);
+  
+  if (!dateData || !dateData.slots || dateData.slots.length === 0) {
+    return false;
+  }
+  
+  // Проверяем, есть ли хотя бы один доступный слот
+  return dateData.slots.some((slot: any) => slot.is_available !== false);
+}
+
+// Фильтрует уже загруженные слоты по выбранной дате
+function filterSlotsByDate(date: Dayjs) {
+  if (!date) {
     timeSlots.value = [];
+    currentSchedule.value = null;
+    selectedTime.value = null;
+    return;
+  }
+
+  const dateKey = date.format('YYYY-MM-DD');
+  const dateData = allLoadedSlots.value.get(dateKey);
+  
+  if (dateData) {
+    currentSchedule.value = dateData.schedule;
+    // Удаляем дубликаты слотов по времени и сортируем
+    const uniqueSlots = new Map<string, any>();
+    dateData.slots.forEach((slot: any) => {
+      if (slot.time && !uniqueSlots.has(slot.time)) {
+        uniqueSlots.set(slot.time, slot);
+      }
+    });
+    
+    // Сортируем слоты по времени
+    timeSlots.value = Array.from(uniqueSlots.values()).sort((a, b) => {
+      const timeA = a.time.split(':').map(Number);
+      const timeB = b.time.split(':').map(Number);
+      return timeA[0] * 60 + timeA[1] - (timeB[0] * 60 + timeB[1]);
+    });
+  } else {
+    currentSchedule.value = null;
+    timeSlots.value = [];
+  }
+  
+  selectedTime.value = null;
+}
+
+function handleMonthChange(direction: number) {
+  if (!selectedDate.value) return;
+  
+  const newDate = selectedDate.value.add(direction, 'month');
+  const newMonth = newDate.startOf('month');
+  const oldMonth = currentMonth.value?.startOf('month');
+  
+  // Обновляем выбранную дату
+  selectedDate.value = newDate;
+  
+  // Если месяц изменился, загружаем данные заново
+  if (!oldMonth || !newMonth.isSame(oldMonth, 'month')) {
+    currentMonth.value = newMonth;
+    loadMonthSlots().then(() => {
+      // После загрузки фильтруем слоты для новой даты
+      filterSlotsByDate(newDate);
+    });
+  } else {
+    // Если месяц не изменился, просто фильтруем данные
+    filterSlotsByDate(newDate);
   }
 }
 
 function selectDate(current: Dayjs) {
   // Разрешаем выбор любой даты в будущем
-  if (current.isAfter(dayjs().startOf("day"))) {
+  if (current.isAfter(dayjs().startOf("day")) || current.isSame(dayjs().startOf("day"))) {
     selectedDate.value = current;
+    // Фильтруем слоты для выбранной даты (не вызываем API)
+    filterSlotsByDate(current);
   }
 }
 
@@ -548,92 +742,119 @@ function bookAppointment() {
   showConfirmation.value = true;
 }
 
-async function confirmAppointment() {
-  if (!selectedDate.value || !selectedTime.value) return;
+// Вспомогательная функция для получения параметров доктора
+function getDoctorParams() {
+  if (!props.doctor) {
+    return null;
+  }
+
+  // Получаем необходимые параметры
+  const postId = props.post_id 
+    || props.doctor.post_id 
+    || props.doctor.damu_post_id 
+    || (props.doctor.doctor_id ? parseInt(props.doctor.doctor_id) : undefined);
   
-  // Для платных услуг нужен выбранный врач
-  if (props.isPaidService && !selectedDoctorForPaid.value) {
-    console.warn('Пожалуйста, выберите врача');
-    return;
+  if (!postId) {
+    console.error('post_id is not available for doctor:', props.doctor);
+    return null;
   }
   
-  // Для ОСМС нужен доктор
-  if (!props.isPaidService && !props.doctor) {
+  let priceListServiceId = props.price_list_service_id || props.doctor.price_list_service_id;
+  if (!priceListServiceId && props.doctor.services && props.doctor.services.length > 0) {
+    const firstService = props.doctor.services[0];
+    priceListServiceId = firstService?.clinic_service?.damu_price_list_service_id || firstService?.clinic_service?.service?.damu_price_list_service_id;
+  }
+  if (!priceListServiceId) {
+    priceListServiceId = 1;
+  }
+  
+  const orgHealthcareId = String(
+    props.org_healthcare_id
+    || props.doctor.clinic_info?.damu_org_health_care_id 
+    || '57000000000003651'
+  );
+  
+  const region = props.region || 'kos';
+
+  return {
+    post_id: postId,
+    price_list_service_id: priceListServiceId,
+    org_healthcare_id: orgHealthcareId,
+    region: region
+  };
+}
+
+async function confirmAppointment() {
+  if (!selectedDate.value || !selectedTime.value || !props.doctor) {
     console.error('Ошибка: не выбран доктор');
     return;
   }
-  
-  let doctorId: string;
-  
-  if (props.isPaidService) {
-    doctorId = selectedDoctorForPaid.value!;
-  } else {
-    doctorId = props.doctor!.doctor_id;
-  }
-  
-  // Для платных услуг не отправляем запрос на API, сразу показываем результат
-  if (props.isPaidService) {
-    
-    // Создаем мок-результат для платной услуги
-    const mockResult = {
-      id: Date.now(), // Генерируем уникальный ID
-      date: selectedDate.value.format("YYYY-MM-DD"),
-      time: selectedTime.value,
-      doctor_id: parseInt(doctorId),
-      patient_code: 1001,
-      status: "confirmed",
-      is_paid_service: true,
-      service_name: props.selectedPaidService?.full_name || "Платная услуга",
-      price: props.selectedPaidService?.first_price || 0
-    };
-    
-    appointmentResult.value = true; // Успех для платной услуги
-    
-    // Эмитим событие с результатом
-    emit("booked", {
-      doctorId: doctorId,
-      date: selectedDate.value.format("YYYY-MM-DD"),
-      time: selectedTime.value,
-      patientData: patientData.value,
-      appointmentResult: true, // true означает успех
-      isPaidService: props.isPaidService,
-      selectedPaidService: props.selectedPaidService,
-      mockResult: mockResult // Дополнительная информация о результате
-    });
-    
-    // Закрываем модалку подтверждения
-    showConfirmation.value = false;
-    // Закрываем основную модалку
-    handleClose();
-    
+
+  // Проверяем наличие IIN
+  if (!userStore.iin || userStore.iin.length !== 12) {
+    console.error('IIN is not available or invalid');
     return;
   }
+
+  // Получаем параметры доктора
+  const doctorParams = getDoctorParams();
+  if (!doctorParams) {
+    console.error('Не удалось получить параметры доктора');
+    return;
+  }
+
+  // Находим выбранный слот для получения точного времени
+  const selectedSlot = timeSlots.value.find(slot => slot.time === selectedTime.value);
   
-  // Для ОСМС отправляем запрос на API
+  // Формируем desired_time_reception в формате ISO
+  let desiredTimeReception: string;
+  if (selectedSlot?.date_time_recept) {
+    // Используем точное время из слота, если доступно
+    desiredTimeReception = selectedSlot.date_time_recept;
+  } else {
+    // Формируем из selectedDate и selectedTime
+    const timeParts = selectedTime.value.split(':');
+    const hours = timeParts[0] || '0';
+    const minutes = timeParts[1] || '0';
+    const dateTime = selectedDate.value
+      .hour(parseInt(hours))
+      .minute(parseInt(minutes))
+      .second(0)
+      .millisecond(0);
+    desiredTimeReception = dateTime.toISOString();
+  }
+  
   const appointmentData: CreateAppointmentRequest = {
-    date: selectedDate.value.format("YYYY-MM-DD"),
-    doctor_id: parseInt(doctorId),
-    patient_code: 1001, // Используем дефолтный код пациента
-    time: selectedTime.value,
+    iin: userStore.iin,
+    grid_schedule_id: currentSchedule.value?.grid_schedule_id?.toString() || '',
+    desired_time_reception: desiredTimeReception,
+    problem: patientData.value.notes || "Запись с терминала", // Используем заметки из patientData или пустую строку
+    post_id: doctorParams.post_id,
+    price_list_service_id: doctorParams.price_list_service_id,
+    org_healthcare_id: doctorParams.org_healthcare_id,
+    region: doctorParams.region,
   };
   
   try {
     isCreatingAppointment.value = true;
     appointmentError.value = null;
     
-    await createAppointment(appointmentData);
+    const response = await createAppointment(appointmentData);
+    
+    // Проверяем, что ответ успешный (статус 201)
+    if (!response || response.success === false) {
+      throw new Error(response?.message || 'Failed to create appointment');
+    }
     
     appointmentResult.value = true;
     
-    // Эмитим событие с результатом
+    // Эмитим событие с результатом только при успехе
     emit("booked", {
-      doctorId: doctorId,
+      doctorId: props.doctor.doctor_id,
       date: selectedDate.value.format("YYYY-MM-DD"),
       time: selectedTime.value,
       patientData: patientData.value,
       appointmentResult: true, // true означает успех
-      isPaidService: props.isPaidService,
-      selectedPaidService: props.selectedPaidService
     });
     
     // Закрываем модалку подтверждения
@@ -641,29 +862,19 @@ async function confirmAppointment() {
     // Закрываем основную модалку
     handleClose();
     
-  } catch (error) {
+  } catch (error: any) {
     appointmentError.value = error;
     
-    // Даже при ошибке показываем ApprovePage как успех
-    appointmentResult.value = true; // Всегда показываем как успех
-    
-    // Эмитим событие с результатом (всегда успех)
-    emit("booked", {
-      doctorId: doctorId,
-      date: selectedDate.value.format("YYYY-MM-DD"),
-      time: selectedTime.value,
-      patientData: patientData.value,
-      appointmentResult: true, // Всегда true - показываем как успех
-      isPaidService: props.isPaidService,
-      selectedPaidService: props.selectedPaidService,
-      error: error // Передаем информацию об ошибке для отладки
+    // Показываем ошибку пользователю
+    notification.error({
+      message: t('appointment_failed_title'),
+      duration: 5,
     });
     
-    // Закрываем модалку подтверждения
-    showConfirmation.value = false;
-    // Закрываем основную модалку
-    handleClose();
+    // НЕ эмитим событие "booked" при ошибке - не открываем ApprovePage
+    // НЕ закрываем модалку подтверждения - пользователь может попробовать снова
   } finally {
+    // Всегда сбрасываем флаг создания в finally
     isCreatingAppointment.value = false;
   }
 }
@@ -1121,6 +1332,17 @@ function formatDate(date: Dayjs | null) {
   color: #fff !important;
   font-weight: bold;
   border-radius: 50%;
+}
+
+/* Стили для дат со слотами */
+.date-with-slots {
+  border: 2px solid #11ae78 !important;
+  font-weight: 600 !important;
+}
+
+.date-with-slots:hover {
+  background-color: #d1f3e5 !important;
+  border-color: #0c593e !important;
 }
 
 /* hover по дням */

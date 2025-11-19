@@ -189,6 +189,7 @@ export default {
   auth_error_short: "IIN must contain 12 digits",
   auth_error_long: "IIN must not contain more than 12 digits",
   auth_error_invalid: "IIN must contain only digits",
+  auth_error_incorrect: "Incorrect IIN",
   // InfoDetails.vue
   general_services: "General services",
   // InfoService.vue
@@ -427,6 +428,9 @@ export default {
   working_hours_monday: "Mon, Wed, Fri — 12:00-19:00",
   working_hours_tuesday: "Tue, Thu — 8:00-15:30",
   city_clinic: "City Clinic",
+  no_available_slots: "No available slots",
+  appointment_failed_title: "Failed to book appointment",
+  appointment_failed_message: "Failed to book your appointment. Please try again.",
   
   // StaticAd.vue
   static_ad_title: "To learn how to order<br/>such a terminal,<br/>scan the QR code",
